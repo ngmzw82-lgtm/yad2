@@ -1,0 +1,52 @@
+name: yad2-agent
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'scan = סריקה רגילה | check = בדיקה שיד2 עונה לשרת | testnotify = שליחת התראת בדיקה'
+        type: choice
+        default: check
+        options: [check, testnotify, scan]
+
+concurrency:
+  group: yad2-agent
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: שחזור מצב (המודעות שכבר נראו)
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: yad2-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: yad2-state-
+
+      - name: הרצה
+        run: node scan.js "${{ github.event.inputs.mode || 'scan' }}"
+        env:
+          CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
+          # אם יד2 תחסום את GitHub, אפשר להוסיף פרוקסי ישראלי: ליצור Secret בשם PROXY_URL ולהסיר את ההערות בשתי השורות הבאות
+          # NODE_USE_ENV_PROXY: '1'
+          # HTTPS_PROXY: ${{ secrets.PROXY_URL }}
+
+      - name: שמירת מצב
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: yad2-state-${{ github.run_id }}-${{ github.run_attempt }}
